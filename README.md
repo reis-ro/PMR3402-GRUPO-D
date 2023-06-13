@@ -1,0 +1,1 @@
+Este é o repositório do projeto de uma torreta Nerf controlada por Bluetooth, para a disciplina de PMR3402, no 1º semestre de 2023 da Engenharia Mecatrônica na Escola Politécnica da USP.
