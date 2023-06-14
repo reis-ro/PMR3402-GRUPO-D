@@ -2,7 +2,7 @@ from PyQt5.QtWidgets import QApplication, QWidget
 from PyQt5.QtGui import QIcon, QPixmap, QImage
 from PyQt5.uic import loadUi
 
-import arduino_communication
+from arduino_communication import ArduinoCommunication
 
 import sys
 
@@ -21,7 +21,7 @@ class ConnectPopUp(QWidget):    # pop-up de conexão
         port = self.COM_entry.text() # lê a caixa de texto para obter a porta COM
         if (self.parent.communication.connect(port)): # tenta conectar ao Arduino
             self.close() # fecha o pop-up, retorna ao programa principal
-            self.parent.set_ui()
+            self.parent.uiConnected()
         else:
             self.COM_entry.setText("Conexão falhou!") # se não conseguir conectar, mostra mensagem de erro
 
@@ -45,21 +45,41 @@ class NerfApp(QWidget):    # janela principal
         self.frame = self.ui.frame                  # frame criado no arquivo gui.ui
         self.bluetooth_button = self.ui.bluetooth_button    # botão bluetooth criado no arquivo gui.ui
         self.motor_on_button = self.ui.motor_on_button      # botão motor criado no arquivo gui.ui
+        self.laser_on_button = self.ui.laser_on_button      # botão motor criado no arquivo gui.ui
 
-        self.communication = arduino_communication.ArduinoCommunication(self)  # objeto de comunicação com Arduino
+        self.communication = ArduinoCommunication(self)  # objeto de comunicação com Arduino
 
         self.bluetooth_button.clicked.connect(self.connectPopUp)   # conecta o botão bluetooth ao método connectPopUp (abre pop-up de conexão)
+        self.motor_on_button.clicked.connect(self.motorOnOff)    # conecta o botão motor ao método motorOnOff
+        self.laser_on_button.clicked.connect(self.laserOnOff)    # conecta o botão laser ao método laserOnOff
 
     def connectPopUp(self):    # abre pop-up de conexão
         if not self.connected and not self.popup:
             popup = ConnectPopUp(self)
             popup.show()
 
-    # def motor_on_off(self):    # liga/desliga motor
-    # adicionar código para alterar estado do botão e do motor
+    def uiConnected(self):  # altera a interface para o estado conectado
+        self.motor_on_button.setEnabled(True)
+        self.frame.setEnabled(True)
+        new_button_img = QIcon('Interface/bt_connected.png')
+        self.bluetooth_button.setIcon(new_button_img)
 
-    # def laser_on_off(self):    # liga/desliga laser
-    # adicionar código para alterar estado do botão e do laser
+    def motorOnOff(self):    # liga/desliga motor
+        if self.connected:
+            self.motor_on = self.motor_on_button.isChecked()
+            self.sendToArduino()
+
+    def laserOnOff(self):    # liga/desliga laser
+        if self.connected:
+            self.laser_on = self.laser_on_button.isChecked()
+            self.sendToArduino()
+
+    def sendToArduino(self):   # envia dados para o Arduino em um formato padrao:
+                               # 255, x, y, motor_on, shoot, laser_on, 254
+        if self.connected: 
+            #message = bytes([255, self.x, self.y, self.motor_on, self.shoot, self.laser_on, 254])
+            message = bytes([255, 50, 50, self.motor_on, self.shoot, 254]) # teste sem laser
+            self.communication.ser.write(message)
 
 
 if __name__ == '__main__':
