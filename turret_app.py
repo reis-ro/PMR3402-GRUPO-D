@@ -4,6 +4,7 @@ from PyQt5.QtWidgets import QApplication, QWidget
 from PyQt5.QtGui import QIcon, QPixmap, QImage
 from PyQt5.uic import loadUi
 from PyQt5.QtSerialPort import QSerialPort
+import json
 
 class SerialThread(QThread):
     data_received = pyqtSignal(bytes)
@@ -95,6 +96,9 @@ class NerfApp(QWidget):
         self.laser_on = False
         self.shoot = False
 
+        self.x = 0.5
+        self.y = 0.5
+
         self.frame = self.ui.frame
         self.bluetooth_button = self.ui.bluetooth_button
         self.motor_on_button = self.ui.motor_on_button
@@ -129,8 +133,10 @@ class NerfApp(QWidget):
 
     def sendToArduino(self):
         if self.connected:
-            message = bytes(['255', '50', '50', str(self.motor_on), str(self.shoot), '254'])
-            self.communication.send_message(message)
+            #message = {'start': 255, 'x':self.x, 'y':self.y, 'motor':self.motor_on, 'shoot':self.shoot, 'end':254}
+            message = {'value':1}
+            json_data = json.dumps(message).encode()
+            self.communication.send_message(json_data)
 
     def handle_data_received(self, data):
         print("Dados recebidos:", data)
