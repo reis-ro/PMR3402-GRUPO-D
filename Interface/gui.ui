@@ -132,8 +132,8 @@
    </property>
    <property name="icon">
     <iconset>
-     <normaloff>motor_off.png</normaloff>
-     <normalon>motor_on.png</normalon>motor_off.png</iconset>
+     <normaloff>laser_off.png</normaloff>
+     <normalon>laser_on.png</normalon>laser_off.png</iconset>
    </property>
    <property name="iconSize">
     <size>
