@@ -40,6 +40,7 @@ class NerfApp(QWidget):
         self.motor_on = False
         self.laser_on = False
         self.shoot = False
+        self.on_frame = False
 
         self.x = 0.5
         self.y = 0.5
@@ -47,13 +48,13 @@ class NerfApp(QWidget):
         self.frame = self.ui.frame
         self.bluetooth_button = self.ui.bluetooth_button
         self.motor_on_button = self.ui.motor_on_button
-        #self.laser_on_button = self.ui.laser_on_button
+        self.laser_on_button = self.ui.laser_on_button
 
         self.communication = ArduinoCommunication(self)
 
         self.bluetooth_button.clicked.connect(self.connectPopUp)
         self.motor_on_button.clicked.connect(self.motorOnOff)
-        #self.laser_on_button.clicked.connect(self.laserOnOff)
+        self.laser_on_button.clicked.connect(self.laserOnOff)
 
     def connectPopUp(self):
         if not self.connected and not self.popup:
@@ -63,8 +64,8 @@ class NerfApp(QWidget):
     def uiConnected(self):
         self.motor_on_button.setEnabled(True)
         self.frame.setEnabled(True)
-        new_button_img = QIcon('Interface/bt_connected.png')
-        self.bluetooth_button.setIcon(new_button_img)
+        bt_icon = QIcon('Interface/bt_connected.png')
+        self.bluetooth_button.setIcon(bt_icon)
 
     def motorOnOff(self):
         if self.connected:
@@ -75,26 +76,57 @@ class NerfApp(QWidget):
                 self.motor_on = 'D'
             self.sendToArduino()
 
-    # def laserOnOff(self):
-    #     if self.connected:
-    #         self.laser_on = self.laser_on_button.isChecked()
-    #         self.sendToArduino()
+    def laserOnOff(self):
+        if self.connected:
+            self.laser_on = self.laser_on_button.isChecked()
+            if self.laser_on:
+                self.laser_on = 'L'
+            else:
+                self.laser_on = 'D'
+            self.sendToArduino()
 
     def sendToArduino(self):
         if self.connected:
-            #message = [255, self.x, self.y, self.motor_on, self.shoot, 254]
-            message = [self.motor_on]
+            message = [255, self.x, self.y, self.motor_on, self.laser_on, self.shoot, 254]
             
             for i in message:
                 self.communication.send_message(str(i).encode())
                 time.sleep(2)
-            
 
-    def handle_data_received(self, data):
-        print("Dados recebidos:", data)
+    def remap(self, value, new_range_min, new_range_max, old_range_min, old_range_max): # remapeia valores de 70 a 550 para 0 a 253 
 
-    def closeEvent(self, event):
-        self.communication.close()
+        remapped_val = (value - old_range_min) * (new_range_max - new_range_min) / (
+                    old_range_max - old_range_min) + new_range_min
+
+        if (remapped_val > new_range_max):
+            remapped_val = new_range_max
+        elif (remapped_val < new_range_min):
+            remapped_val = new_range_min
+
+        return remapped_val
+
+    def mouseMoveEvent(self, event):
+        if (69 < event.x() < 551 and 69 < event.y() < 551):   # se o mouse estiver dentro do frame
+            self.x = int(self.remap(event.x(), 0, 253, 70, 550))
+            self.y = int(self.remap(event.y(), 0, 253, 70, 550))
+            self.on_frame = True
+        else:
+            self.on_frame = False
+            self.shoot = False
+
+        self.sendToArduino()
+
+    def mousePressEvent(self, event):
+        if self.on_frame and self.motor_on:
+            self.shoot = True
+            self.sendToArduino()
+
+    def mouseReleaseEvent(self, event):
+        if self.on_frame:
+            self.shoot = False
+            self.sendToArduino()
+
+    
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
