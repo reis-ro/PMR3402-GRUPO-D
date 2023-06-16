@@ -1,87 +1,32 @@
-import sys
-from PyQt5.QtCore import QIODevice, QThread, pyqtSignal
 from PyQt5.QtWidgets import QApplication, QWidget
 from PyQt5.QtGui import QIcon, QPixmap, QImage
 from PyQt5.uic import loadUi
-from PyQt5.QtSerialPort import QSerialPort
-import json
 
-class SerialThread(QThread):
-    data_received = pyqtSignal(bytes)
+from arduino_communication import ArduinoCommunication
 
-    def __init__(self, port, parent=None):
-        super().__init__(parent)
-        self.port = port
+import sys, time
 
-    def run(self):
-        self.serial_port = QSerialPort(self.port)
-        self.serial_port.setBaudRate(QSerialPort.Baud9600)
-        self.serial_port.readyRead.connect(self.handle_ready_read)
-
-        if self.serial_port.open(QIODevice.ReadWrite):
-            print("Conexão estabelecida com sucesso.")
-
-        self.exec_()
-
-    def handle_ready_read(self):
-        data = self.serial_port.readAll()
-        self.data_received.emit(data)
-
-    def send_data(self, data):
-        if self.serial_port.isOpen():
-            self.serial_port.write(data)
-
-    def close(self):
-        if self.serial_port.isOpen():
-            self.serial_port.close()
-
-class ArduinoCommunication():
-    def __init__(self, app):
-        self.parent = app
-        self.baudrate = 9600
-
-    def connect(self, port):
-        try:
-            self.serial_thread = SerialThread(port)
-            self.serial_thread.data_received.connect(self.parent.handle_data_received)  # Conexão assíncrona entre threads
-            self.serial_thread.start()
-            self.parent.connected = True
-            self.parent.COM_port = port
-            print("Arduino conectado na porta", port)
-            return True
-
-        except Exception as e:
-            print("A conexão falhou:", str(e))
-            return False
-
-    def send_message(self, message):
-        self.serial_thread.send_data(message)
-        print(message)
-
-    def close(self):
-        self.serial_thread.close()
-
-class ConnectPopUp(QWidget):
+class ConnectPopUp(QWidget):    # pop-up de conexão
     def __init__(self, parent):
-        super().__init__()
-        self.parent = parent
-        self.ui = loadUi('Interface/popup.ui', self)
+        super().__init__() 
+        self.parent = parent # guarda referência ao programa principal
+        self.ui = loadUi('Interface/popup.ui', self) # carrega layout do pop-up
 
-        self.COM_entry = self.ui.COM_entry
-        self.connect_button = self.ui.connect_button
-        self.connect_button.clicked.connect(self.connectToArduino)
-        self.parent.popup = True
+        self.COM_entry = self.ui.COM_entry # entrada de texto criada no arquivo popup.ui
+        self.connect_button = self.ui.connect_button # botão de conexão criado no arquivo popup.ui
+        self.connect_button.clicked.connect(self.connectToArduino) # conecta o botão de conexão ao método connectToArduino
+        self.parent.popup = True # indica que o pop-up está aberto
 
     def connectToArduino(self):
-        port = self.COM_entry.text()
-        if self.parent.communication.connect(port):
-            self.close()
+        port = self.COM_entry.text() # lê a caixa de texto para obter a porta COM
+        if (self.parent.communication.connect(port)): # tenta conectar ao Arduino
+            self.close() # fecha o pop-up, retorna ao programa principal
             self.parent.uiConnected()
         else:
-            self.COM_entry.setText("Conexão falhou!")
+            self.COM_entry.setText("Conexão falhou!") # se não conseguir conectar, mostra mensagem de erro
 
-    def closeEvent(self, event):
-        self.parent.popup = False
+    def closeEvent(self, event): # quando o pop-up é fechado
+        self.parent.popup = False # indica que o pop-up foi fechado
 
 class NerfApp(QWidget):
     def __init__(self):
@@ -102,13 +47,13 @@ class NerfApp(QWidget):
         self.frame = self.ui.frame
         self.bluetooth_button = self.ui.bluetooth_button
         self.motor_on_button = self.ui.motor_on_button
-        self.laser_on_button = self.ui.laser_on_button
+        #self.laser_on_button = self.ui.laser_on_button
 
         self.communication = ArduinoCommunication(self)
 
         self.bluetooth_button.clicked.connect(self.connectPopUp)
         self.motor_on_button.clicked.connect(self.motorOnOff)
-        self.laser_on_button.clicked.connect(self.laserOnOff)
+        #self.laser_on_button.clicked.connect(self.laserOnOff)
 
     def connectPopUp(self):
         if not self.connected and not self.popup:
@@ -124,19 +69,26 @@ class NerfApp(QWidget):
     def motorOnOff(self):
         if self.connected:
             self.motor_on = self.motor_on_button.isChecked()
+            if self.motor_on:
+                self.motor_on = 'L'
+            else:
+                self.motor_on = 'D'
             self.sendToArduino()
 
-    def laserOnOff(self):
-        if self.connected:
-            self.laser_on = self.laser_on_button.isChecked()
-            self.sendToArduino()
+    # def laserOnOff(self):
+    #     if self.connected:
+    #         self.laser_on = self.laser_on_button.isChecked()
+    #         self.sendToArduino()
 
     def sendToArduino(self):
         if self.connected:
-            #message = {'start': 255, 'x':self.x, 'y':self.y, 'motor':self.motor_on, 'shoot':self.shoot, 'end':254}
-            message = {'value':1}
-            json_data = json.dumps(message).encode()
-            self.communication.send_message(json_data)
+            #message = [255, self.x, self.y, self.motor_on, self.shoot, 254]
+            message = [self.motor_on]
+            
+            for i in message:
+                self.communication.send_message(str(i).encode())
+                time.sleep(2)
+            
 
     def handle_data_received(self, data):
         print("Dados recebidos:", data)
