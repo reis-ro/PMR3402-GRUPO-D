@@ -2,9 +2,9 @@ from PyQt5.QtWidgets import QApplication, QWidget
 from PyQt5.QtGui import QIcon, QPixmap, QImage
 from PyQt5.uic import loadUi
 
-import arduino_communication
+from arduino_communication import ArduinoCommunication
 
-import sys
+import sys, time
 
 class ConnectPopUp(QWidget):    # pop-up de conexão
     def __init__(self, parent):
@@ -21,49 +21,82 @@ class ConnectPopUp(QWidget):    # pop-up de conexão
         port = self.COM_entry.text() # lê a caixa de texto para obter a porta COM
         if (self.parent.communication.connect(port)): # tenta conectar ao Arduino
             self.close() # fecha o pop-up, retorna ao programa principal
-            self.parent.set_ui()
+            self.parent.uiConnected()
         else:
             self.COM_entry.setText("Conexão falhou!") # se não conseguir conectar, mostra mensagem de erro
 
     def closeEvent(self, event): # quando o pop-up é fechado
         self.parent.popup = False # indica que o pop-up foi fechado
 
-class NerfApp(QWidget):    # janela principal
+class NerfApp(QWidget):
     def __init__(self):
         super().__init__()
+        self.ui = loadUi('Interface/gui.ui', self)
+        self.show()
 
-        self.ui = loadUi('Interface/gui.ui', self)  # carrega layout da interface
-        self.show()     
-
-        self.COM_port = ""         # Porta de comunicação com Arduino
+        self.COM_port = ""
         self.popup = False
-        self.connected = False     # True quando conectado ao arduino
-        self.motor_on = False      # True para ligar o motor
-        self.laser_on = False      # True para ligar o laser
-        self.shoot = False         # True para atirar
+        self.connected = False
+        self.motor_on = False
+        self.laser_on = False
+        self.shoot = False
 
-        self.frame = self.ui.frame                  # frame criado no arquivo gui.ui
-        self.bluetooth_button = self.ui.bluetooth_button    # botão bluetooth criado no arquivo gui.ui
-        self.motor_on_button = self.ui.motor_on_button      # botão motor criado no arquivo gui.ui
+        self.x = 0.5
+        self.y = 0.5
 
-        self.communication = arduino_communication.ArduinoCommunication(self)  # objeto de comunicação com Arduino
+        self.frame = self.ui.frame
+        self.bluetooth_button = self.ui.bluetooth_button
+        self.motor_on_button = self.ui.motor_on_button
+        #self.laser_on_button = self.ui.laser_on_button
 
-        self.bluetooth_button.clicked.connect(self.connectPopUp)   # conecta o botão bluetooth ao método connectPopUp (abre pop-up de conexão)
+        self.communication = ArduinoCommunication(self)
 
-    def connectPopUp(self):    # abre pop-up de conexão
+        self.bluetooth_button.clicked.connect(self.connectPopUp)
+        self.motor_on_button.clicked.connect(self.motorOnOff)
+        #self.laser_on_button.clicked.connect(self.laserOnOff)
+
+    def connectPopUp(self):
         if not self.connected and not self.popup:
             popup = ConnectPopUp(self)
             popup.show()
 
-    # def motor_on_off(self):    # liga/desliga motor
-    # adicionar código para alterar estado do botão e do motor
+    def uiConnected(self):
+        self.motor_on_button.setEnabled(True)
+        self.frame.setEnabled(True)
+        new_button_img = QIcon('Interface/bt_connected.png')
+        self.bluetooth_button.setIcon(new_button_img)
 
-    # def laser_on_off(self):    # liga/desliga laser
-    # adicionar código para alterar estado do botão e do laser
+    def motorOnOff(self):
+        if self.connected:
+            self.motor_on = self.motor_on_button.isChecked()
+            if self.motor_on:
+                self.motor_on = 'L'
+            else:
+                self.motor_on = 'D'
+            self.sendToArduino()
 
+    # def laserOnOff(self):
+    #     if self.connected:
+    #         self.laser_on = self.laser_on_button.isChecked()
+    #         self.sendToArduino()
+
+    def sendToArduino(self):
+        if self.connected:
+            #message = [255, self.x, self.y, self.motor_on, self.shoot, 254]
+            message = [self.motor_on]
+            
+            for i in message:
+                self.communication.send_message(str(i).encode())
+                time.sleep(2)
+            
+
+    def handle_data_received(self, data):
+        print("Dados recebidos:", data)
+
+    def closeEvent(self, event):
+        self.communication.close()
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     ex = NerfApp()
-    app.exec_()
-    #sys.exit(app.exec_())
+    sys.exit(app.exec_())
