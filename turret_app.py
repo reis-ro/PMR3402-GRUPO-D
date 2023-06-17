@@ -63,6 +63,7 @@ class NerfApp(QWidget):
 
     def uiConnected(self):
         self.motor_on_button.setEnabled(True)
+        self.laser_on_button.setEnabled(True)
         self.frame.setEnabled(True)
         bt_icon = QIcon('Interface/bt_connected.png')
         self.bluetooth_button.setIcon(bt_icon)
@@ -71,27 +72,27 @@ class NerfApp(QWidget):
         if self.connected:
             self.motor_on = self.motor_on_button.isChecked()
             if self.motor_on:
-                self.motor_on = 'L'
+                self.motor_on = '1'
             else:
-                self.motor_on = 'D'
+                self.motor_on = '0'
             self.sendToArduino()
 
     def laserOnOff(self):
         if self.connected:
             self.laser_on = self.laser_on_button.isChecked()
             if self.laser_on:
-                self.laser_on = 'L'
+                self.laser_on = '1'
             else:
-                self.laser_on = 'D'
+                self.laser_on = '0'
             self.sendToArduino()
 
     def sendToArduino(self):
         if self.connected:
-            message = [255, self.x, self.y, self.motor_on, self.laser_on, self.shoot, 254]
+            message = ['<', 0, 0, int(self.motor_on), int(self.shoot), int(self.laser_on), '>']
             
             for i in message:
                 self.communication.send_message(str(i).encode())
-                time.sleep(2)
+                time.sleep(0.01)
 
     def remap(self, value, new_range_min, new_range_max, old_range_min, old_range_max): # remapeia valores de 70 a 550 para 0 a 253 
 
