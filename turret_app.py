@@ -72,27 +72,30 @@ class NerfApp(QWidget):
         if self.connected:
             self.motor_on = self.motor_on_button.isChecked()
             if self.motor_on:
-                self.motor_on = '1'
+                self.motor_on = 1
             else:
-                self.motor_on = '0'
+                self.motor_on = 0
             self.sendToArduino()
 
     def laserOnOff(self):
         if self.connected:
             self.laser_on = self.laser_on_button.isChecked()
             if self.laser_on:
-                self.laser_on = '1'
+                self.laser_on = 1
             else:
-                self.laser_on = '0'
+                self.laser_on = 0
             self.sendToArduino()
 
     def sendToArduino(self):
         if self.connected:
-            message = ['<', 0, 0, int(self.motor_on), int(self.shoot), int(self.laser_on), '>']
+            message = bytes([255, int(self.x), int(self.y), int(self.motor_on), int(self.shoot), int(self.laser_on), 254])
+            #message = bytes([255, 0, 0, 0, 0, self.laser_on, 254])
+
+            self.communication.send_message(message)
             
-            for i in message:
-                self.communication.send_message(str(i).encode())
-                time.sleep(0.01)
+            # for i in message:
+            #     self.communication.send_message(str(i).encode())
+            #     time.sleep(1)
 
     def remap(self, value, new_range_min, new_range_max, old_range_min, old_range_max): # remapeia valores de 70 a 550 para 0 a 253 
 
@@ -106,26 +109,26 @@ class NerfApp(QWidget):
 
         return remapped_val
 
-    def mouseMoveEvent(self, event):
-        if (69 < event.x() < 551 and 69 < event.y() < 551):   # se o mouse estiver dentro do frame
-            self.x = int(self.remap(event.x(), 0, 253, 70, 550))
-            self.y = int(self.remap(event.y(), 0, 253, 70, 550))
-            self.on_frame = True
-        else:
-            self.on_frame = False
-            self.shoot = False
+    # def mouseMoveEvent(self, event):
+    #     if (69 < event.x() < 551 and 69 < event.y() < 551):   # se o mouse estiver dentro do frame
+    #         self.x = int(self.remap(event.x(), 0, 253, 70, 550))
+    #         self.y = int(self.remap(event.y(), 0, 253, 70, 550))
+    #         self.on_frame = True
+    #     else:
+    #         self.on_frame = False
+    #         self.shoot = False
 
-        self.sendToArduino()
+    #     self.sendToArduino()
 
-    def mousePressEvent(self, event):
-        if self.on_frame and self.motor_on:
-            self.shoot = True
-            self.sendToArduino()
+    # def mousePressEvent(self, event):
+    #     if self.on_frame and self.motor_on:
+    #         self.shoot = True
+    #         self.sendToArduino()
 
-    def mouseReleaseEvent(self, event):
-        if self.on_frame:
-            self.shoot = False
-            self.sendToArduino()
+    # def mouseReleaseEvent(self, event):
+    #     if self.on_frame:
+    #         self.shoot = False
+    #         self.sendToArduino()
 
     
 
