@@ -1,19 +1,30 @@
-#include <SoftwareSerial.h>
+// #include <SoftwareSerial.h>
 #include <Servo.h>
+#include <Ultrasonic.h>
 
 // Definição dos pinos utilizados pelos componentes
-#define SERVO_HORIZONTAL_PIN 3
-#define SERVO_VERTICAL_PIN 5
-#define LASER_PIN 7
-#define MOTOR1_PIN1 12
-#define MOTOR1_PIN2 13
-#define MOTOR2_PIN1 14
-#define MOTOR2_PIN2 15
-#define SERVO_EMPURRAR_PIN 11
+#define SERVO_HORIZONTAL_PIN 4
+#define SERVO_VERTICAL_PIN 3
+#define SERVO_EMPURRAR_PIN 2
+#define LASER_PIN 8
+#define MOTOR1_PIN1 10
+#define MOTOR1_PIN2 11
+#define MOTOR2_PIN1 12
+#define MOTOR2_PIN2 13
+// sensor de distância
+#define TRIG_PIN 7
+#define ECHO_PIN 8
 // módulo HC05
-#define RX 2
-#define TX 3
-#define BT_PIN 4
+#define RX 19
+#define TX 18
+#define BT_PIN 6  
+// buzzer
+#define BUZZER_PIN 13
+
+#define OFF 0
+#define ON 1
+#define FALSE '0'
+#define TRUE '1'
 
 // Definições de movimento
 #define PAN_LIMIT_1 0
@@ -27,15 +38,15 @@
 #define buffSize 30
 #define startMarker 255
 #define endMarker 254
-byte byte_from_app;
-byte inputBuffer[buffSize];
+char byte_from_app;
+char inputBuffer[buffSize];
 byte bytesRecvd = 0;
-boolean data_received = FALSE;
+boolean data_received = false;
 
-// Variáveis associadas aos módulo de propulsão e tempo de disparo
-bool is_firing = FALSE;
-bool can_fire = FALSE;
-bool recoiling = FALSE;
+// Variáveis associadas aos módulos de propulsão e tempo de disparo
+bool is_firing = false;
+bool can_fire = false;
+bool recoiling = false;
 
 unsigned long firing_start_time = 0;
 unsigned long firing_current_time = 0;
@@ -65,11 +76,14 @@ Servo servoHorizontal;
 Servo servoVertical;
 Servo servoEmpurrar;
 
+// Inicializa o objeto Ultrasonic
+Ultrasonic ultrasonic(TRIG_PIN, ECHO_PIN);
+
 // Conecta o pino TX do HC05 ao pino RX 2 do arduino e pino RX do HC05 ao pino TX 3 do arduino por um divisor de tensão
-SoftwareSerial BTserial(RX, TX);
+// SoftwareSerial BTserial(RX, TX);
  
 // Inicializa a variável de verificação da conexão bluetooth
-boolean BTconnected = FALSE;
+boolean BTconnected = false;
 
 // Inicializa variável de controle da máquina de estados
 State currentState = STATE_IDLE;
@@ -78,6 +92,8 @@ State currentState = STATE_IDLE;
 unsigned long tempoAtual;     // Variável para armazenar o tempo atual
 unsigned long ultimoEnvio;    // Variável para armazenar o tempo do último envio
 const unsigned long intervaloEnvio = 1000; // Intervalo de 1s para envio
+unsigned long ultimaLeitura; // Variável para armazenar o tempo da última leitura de distância
+const unsigned long intervaloLeitura = 500; // Intervalo de 500ms para leitura
 
 void setup() {
   // Anexa servos aos pinos
@@ -87,13 +103,14 @@ void setup() {
 
   // Inicialização da posição dos servos
   servoEmpurrar.write(RECOIL_REST);
+  delay(1000);
   servoHorizontal.write(90);
   delay(1000);
   servoVertical.write(105);
 
   // Define pino do laser
   pinMode(LASER_PIN, OUTPUT);
-  digitalWrite(LASER_PIN, LOW);
+  digitalWrite(LASER_PIN, OFF);
 
   // Define pino dos motores DC
   pinMode(MOTOR1_PIN1, OUTPUT);
@@ -102,22 +119,56 @@ void setup() {
   pinMode(MOTOR2_PIN2, OUTPUT);
 
   // Define pino do bluetooth
-  pinMode(BT_PIN, INPUT); 
-  
+  // pinMode(BT_PIN, INPUT); 
+
+  // Define pino do buzzer
+  pinMode(BUZZER_PIN, OUTPUT);
+
   // Comunicação serial
   Serial.begin(9600);
+  Serial1.begin(9600);
 
   // Inicializações de tempo
   tempoAtual = millis();     // Inicializa a variável tempoAtual
   ultimoEnvio = tempoAtual;  // Inicializa a variável ultimoEnvio (bluetooth)
+  ultimaLeitura = tempoAtual; // Inicializa a variável ultimaLeitura (distância)
+
+  beep(); // beep simples ao iniciar o sistema
 }
 
 void loop() {
+  getData(); // Executa funçao que recebe o buffer de dados
 
-  getData(); // Recebe o buffer de dados
-  if (data_received) { 
+  // if (data_received) {
+  //       // Verificar o comando recebido e realizar ação correspondente
+  //       if (byte_from_app == '1') { // botão do laser ativado
+  //         // Executar ação correspondente ao comando 'laser'
+  //         LASER = ON;       // Liga laser
+  //         ligarLaser();
+  //       } else {
+  //         LASER = OFF;
+  //         desligarLaser();
+  //       }
+  // }
 
-  }
+  tempoAtual = millis();  // Atualiza o tempo atual a cada iteração do loop
+
+  // faz a leitura do sensor de distância para exibir na interface
+  // if (tempoAtual - ultimaLeitura >= intervaloLeitura) {
+  //   // Realiza a leitura do sensor de distância
+  //   float distancia_cm = ultrasonic.read();
+
+  //   // Envia a distância no monitor serial bluetooth
+  //   Serial.print("Distancia: ");
+  //   Serial.print(distancia_cm);
+  //   Serial.println(" cm");
+
+  //   Serial1.print("Distancia: ");
+  //   Serial1.print(distancia_cm);
+  //   Serial1.println(" cm");
+
+  //   ultimaLeitura = tempoAtual; // Atualiza o tempo da última leitura
+  // }
   
   // Máquina de estados
   switch (currentState) {
@@ -126,7 +177,9 @@ void loop() {
       LASER = OFF;       // Desliga laser  
       PROPULSION = OFF;  // Desliga propulsores
       servoHorizontal.write(90);  // Reseta posição inicial
+      delay(300);
       servoVertical.write(105);    // Reseta posição inicial
+      delay(300);
       
       // Transição para o próximo estado
       if (bluetoothConectado()) {
@@ -136,27 +189,34 @@ void loop() {
       
     case STATE_BT_CON:
       // Ação: Mantém a torreta parada com BT conectado
+
       LASER = OFF;       // Desliga laser  
       PROPULSION = OFF;  // Desliga propulsores
 
-      // Verificar o comando recebido e realizar ação correspondente
-      if (inputBuffer[4] == TRUE) { // botão do laser ativado
-        // Executar ação correspondente ao comando 'laser'
-        LASER = ON;       // Liga laser
-      } 
-      else if (inputBuffer[2] == TRUE) { // botão de propulsão ativado
-        // Executar ação correspondente ao comando 'motor_dc'
-        PROPULSION = ON;  // Liga propulsores
-      } 
+      move_servo(); // Ajusta posição do servoHorizontal e servoVertical
+
+      if (data_received) {
+        // Verificar o comando recebido e realizar ação correspondente
+        if (inputBuffer[4] == TRUE) { // botão do laser ativado
+          // Executar ação correspondente ao comando 'laser'
+          LASER = ON;       // Liga laser
+          ligarLaser();
+        } 
+        else if (inputBuffer[2] == TRUE) { // botão de propulsão ativado
+          // Executar ação correspondente ao comando 'motor_dc'
+          PROPULSION = ON;  // Liga propulsores
+          ligarPropulsao();
+        } 
+      }
 
       // Transições para outros estados
       if (!bluetoothConectado()) { // Verificação da conexão Bluetooth
         currentState = STATE_IDLE;
       } 
-      if (laserLigado() && !propulsionLigada()) {
+      else if (laserLigado() && !propulsionLigada()) {
         currentState = STATE_LASER_ON;
       } 
-      if (!laserLigado() && propulsionLigada()) {
+      else if (!laserLigado() && propulsionLigada()) {
         currentState = STATE_DC_ON;
       } 
       break;
@@ -166,24 +226,30 @@ void loop() {
       LASER = ON;       // Liga laser  
       PROPULSION = OFF;  // Desliga propulsores
 
-      // Verificar o comando recebido e realizar ação correspondente
-      if (inputBuffer[4] == FALSE) { // botão do laser desativado
-        // Executar ação correspondente ao comando 'laser'
-        LASER = OFF;       // Desliga laser
-      } 
-      if (inputBuffer[2] == TRUE) { // botão de propulsão ativado
-        // Executar ação correspondente ao comando 'motor_dc'
-        PROPULSION = ON;  // Liga propulsores
-      } 
-      
+      move_servo(); // Ajusta posição do servoHorizontal e servoVertical
+
+      if (data_received) {
+        // Verificar o comando recebido e realizar ação correspondente
+        if (inputBuffer[4] == FALSE) { // botão do laser desativado
+          // Executar ação correspondente ao comando 'laser'
+          LASER = OFF;       // Desliga laser
+          desligarLaser();
+        } 
+        if (inputBuffer[2] == TRUE) { // botão de propulsão ativado
+          // Executar ação correspondente ao comando 'motor_dc'
+          PROPULSION = ON;  // Liga propulsores
+          ligarPropulsao();
+        } 
+      }
+
       // Transições para outros estados
       if (!bluetoothConectado()) {
         currentState = STATE_IDLE;
       } 
-      if (!laserLigado()) {
+      else if (!laserLigado()) {
         currentState = STATE_BT_CON;
       } 
-      if (propulsionLigada()) {
+      else if (propulsionLigada()) {
         currentState = STATE_LASER_DC_ON;
       } 
       break;
@@ -193,27 +259,40 @@ void loop() {
       LASER = OFF;       // Desliga laser  
       PROPULSION = ON;  // Liga propulsores
 
-      // Verificar o comando recebido e realizar ação correspondente
-      if (inputBuffer[4] == TRUE) { // botão do laser ativado
-        // Executar ação correspondente ao comando 'laser'
-        LASER = ON;       // Liga laser
-      } 
-      if (inputBuffer[2] == FALSE) { // botão de propulsão desativado
-        // Executar ação correspondente ao comando 'motor_dc'
-        PROPULSION = OFF;  // Desliga propulsores
-      } 
-      if (inputBuffer[3] == TRUE) { // botão de disparo pressionado
+      move_servo(); // Ajusta posição do servoHorizontal e servoVertical
 
+      if (data_received) {
+        // Verificar o comando recebido e realizar ação correspondente
+        if (inputBuffer[4] == TRUE) { // botão do laser ativado
+          // Executar ação correspondente ao comando 'laser'
+          LASER = ON;       // Liga laser
+          ligarLaser();
+        } 
+        if (inputBuffer[2] == FALSE) { // botão de propulsão desativado
+          // Executar ação correspondente ao comando 'motor_dc'
+          PROPULSION = OFF;  // Desliga propulsores
+          desligarPropulsao();
+        } 
+        if (inputBuffer[3] == TRUE) { // botão de disparo pressionado
+          // Executar ação correspondente ao comando 'shoot'
+          if (!is_firing && !recoiling) { // não está atirando nem recuando servoEmpurrar
+            can_fire = true;              // habilita disparo (efeitos na função Disparar())
+          }
+        }
+        else {                  // se o botão de disparo não estiver pressionado
+          can_fire = false;     // desabilita disparo (efeitos na função Disparar())
+        }
+        Disparar();           
       }
-      
+
       // Transições para outros estados
       if (!bluetoothConectado()) {
         currentState = STATE_IDLE;
       } 
-      if (!propulsionLigada()) {
+      else if (!propulsionLigada()) {
         currentState = STATE_BT_CON;
       } 
-      if (laserLigado()) {
+      else if (laserLigado()) {
         currentState = STATE_LASER_DC_ON;
       }
       break;
@@ -222,21 +301,33 @@ void loop() {
       // Ação: Ativa o laser e a propulsão dos dardos
       LASER = ON;       // Liga laser  
       PROPULSION = ON;  // Liga propulsores
-      
-      // Verificar o comando recebido e realizar ação correspondente
-      if (inputBuffer[4] == FALSE) { // botão do laser desativado
-        // Executar ação correspondente ao comando 'laser'
-        LASER = OFF;       // Desliga laser
-      } 
-      if (inputBuffer[2] == FALSE) { // botão de propulsão desativado
-        // Executar ação correspondente ao comando 'motor_dc'
-        PROPULSION = OFF;  // Desliga propulsores
-      } 
-      if (inputBuffer[3] == TRUE) { // botão de disparo pressionado
-        // Executar ação correspondente ao comando 'shoot'
 
+      move_servo(); // Ajusta posição do servoHorizontal e servoVertical
+
+      if (data_received) {
+        // Verificar o comando recebido e realizar ação correspondente
+        if (inputBuffer[4] == FALSE) { // botão do laser desativado
+          // Executar ação correspondente ao comando 'laser'
+          LASER = OFF;       // Desliga laser
+          desligarLaser();
+        } 
+        else if (inputBuffer[2] == FALSE) { // botão de propulsão desativado
+          // Executar ação correspondente ao comando 'motor_dc'
+          PROPULSION = OFF;  // Desliga propulsores
+          desligarPropulsao();
+        } 
+        if (inputBuffer[3] == TRUE) { // botão de disparo pressionado
+          // Executar ação correspondente ao comando 'shoot'
+          if (!is_firing && !recoiling) { // não está atirando nem recuando servoEmpurrar
+            can_fire = true;              // habilita disparo (efeitos na função Disparar())
+          }
+        }
+        else {                  // se o botão de disparo não estiver pressionado
+          can_fire = false;     // desabilita disparo (efeitos na função Disparar())
+        }
+        Disparar(); 
       }
-
+      
       // Transições para outros estados
       if (!bluetoothConectado()) {
         currentState = STATE_IDLE;
@@ -266,39 +357,46 @@ void getData() {
   if (Serial.available()) {  // Se houver dados disponíveis no serial
 
     byte_from_app = Serial.read();   // Lê o próximo caractere disponível
+    data_received = 1;
 
-    if (byte_from_app == startMarker) {     // Procura pelo byte inicial (255)
-      bytesRecvd = 0;                   // reseta os bytes recebidos para 0 (para começar a armazenar no inputBuffer)
-      data_received = false;
-    }
+    // if (byte_from_app == startMarker) {     // Procura pelo byte inicial (255)
+    //   bytesRecvd = 0;                   // reseta os bytes recebidos para 0 (para começar a armazenar no inputBuffer)
+    //   data_received = false;
+    // }
 
-    else if (byte_from_app == endMarker) {    // Procura pelo byte final (254)
-      data_received = true;                // coloca data_received em true para o dado ser utilizado
-    }
+    // else if (byte_from_app == endMarker) {    // Procura pelo byte final (254)
+    //   data_received = true;                // coloca data_received em true para o dado ser utilizado
+    // }
 
-    else {                            // adiciona os bytes recebidos para o inputBuffer
-      inputBuffer[bytesRecvd] = byte_from_app;     // adiciona caractere para o input buffer
-      bytesRecvd++;                                // incrementa os bytes recebidos (atua como índice)
-      if (bytesRecvd == buffSize) {    // apenas por segurança no caso do inputBuffer lotar (não deve acontecer)
-        bytesRecvd = buffSize - 1;    // se bytesReceived é maior que o tamanho do buffer, então ajusta bytesReceived para ser menor
-      }
-    }
+    // else {                            // adiciona os bytes recebidos para o inputBuffer
+    //   inputBuffer[bytesRecvd] = byte_from_app;     // adiciona caractere para o input buffer
+    //   bytesRecvd++;                                // incrementa os bytes recebidos (atua como índice)
+    //   if (bytesRecvd == buffSize) {    // apenas por segurança no caso do inputBuffer lotar (não deve acontecer)
+    //     bytesRecvd = buffSize - 1;    // se bytesReceived é maior que o tamanho do buffer, então ajusta bytesReceived para ser menor
+    //   }
+    // }
   }
 }
 
 // Lógica para verificar se o Bluetooth está conectado
 bool bluetoothConectado() {
-  BT_state_previous = BTconnected;
-  if (digitalRead(BT_PIN) == HIGH) { // se bluetooth estiver conectado
-    BTconnected = TRUE;
-    if (BT_state_previous == FALSE) { // inicializa BTserial se ele já não estava ligado antes
-      BTserial.begin(9600); 
-    }
+  bool BT_state_previous = BTconnected;
+  if (Serial.available()) { // se bluetooth estiver conectado
+    BTconnected = true;
+    double_beep(); // beep duplo para avisar conexão 
   }
   else {
-    BTconnected = FALSE;
+    BTconnected = false;
   }
   return BTconnected;
+}
+
+// Executa o movimento dos servos
+void move_servo() {
+  byte servoHorizontal_position = map(inputBuffer[0], 0, 253, PAN_LIMIT_2, PAN_LIMIT_1); // converte o valor do inputbuffer na posição do servo
+  servoHorizontal.write(servoHorizontal_position); // ajusta a posição do servo horizontal
+  byte servoVertical_position = map(inputBuffer[1], 0 , 253, TILT_LIMIT_1, TILT_LIMIT_2); // converte o valor do inputbuffer na posição do servo
+  servoVertical.write(servoVertical_position); // ajusta a posição do servo vertical
 }
 
 // Lógica para verificar se o laser está ligado
@@ -326,10 +424,65 @@ void ligarLaser() {
   digitalWrite(LASER_PIN, HIGH);
 }
 
+// Desliga o laser
+void desligarLaser() {
+  digitalWrite(LASER_PIN, LOW);
+}
+
 // Liga a propulsão (Ponte H Dupla L298N) - Motores DC em rotação oposta
 void ligarPropulsao() {
   digitalWrite(MOTOR1_PIN1, HIGH);
   digitalWrite(MOTOR1_PIN2, LOW);
   digitalWrite(MOTOR2_PIN1, LOW);  
   digitalWrite(MOTOR2_PIN2, HIGH);
+}
+
+// Desliga a propulsão (Ponte H Dupla L298N)
+void desligarPropulsao() {
+  digitalWrite(MOTOR1_PIN1, LOW);
+  digitalWrite(MOTOR1_PIN2, LOW);
+  digitalWrite(MOTOR2_PIN1, LOW);
+  digitalWrite(MOTOR2_PIN2, LOW);
+}
+
+// Realiza o disparo
+void Disparar() {
+  if (can_fire && !is_firing && PROPULSION) { // Se puder atirar, não estiver atirando e motores de propulsão ligados
+    firing_start_time = millis();
+    recoil_start_time = millis();
+    is_firing = true;
+  }
+
+  firing_current_time = millis();
+  recoil_current_time = millis();
+
+  if (is_firing && firing_current_time - firing_start_time < firing_time) {
+    servoEmpurrar.write(RECOIL_PUSHED);
+  }
+  else if (is_firing && recoil_current_time - recoil_start_time < recoil_time) {
+    servoEmpurrar.write(RECOIL_REST);
+  }
+  else if (is_firing && recoil_current_time - recoil_start_time > recoil_time) {
+    is_firing = false;
+  }
+}
+
+// Ligar o buzzer
+void beep(){
+  int freq = 2000;
+  tone(BUZZER_PIN, freq); // gera frequencia de 2000Hz no buzzer
+  delay(300);           // aguarda 0,3s
+  noTone(BUZZER_PIN); // para frequencia no buzzer
+}
+
+// Ligar o buzzer duplo
+void double_beep(){
+  int freq = 2000;
+  tone(BUZZER_PIN, freq); // gera frequencia de 2000Hz no buzzer
+  delay(300);           // aguarda 0,3s
+  noTone(BUZZER_PIN); // para frequencia no buzzer
+  delay(100);           // aguarda 0,1s
+  tone(BUZZER_PIN, freq); // gera frequencia de 2000Hz no buzzer
+  delay(300);           // aguarda 0,3s
+  noTone(BUZZER_PIN); // para frequencia no buzzer
 }
