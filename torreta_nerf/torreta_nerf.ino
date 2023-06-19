@@ -1,3 +1,4 @@
+// #include <SoftwareSerial.h>
 #include <Servo.h>
 #include <Ultrasonic.h>
 
@@ -11,12 +12,12 @@
 #define MOTOR2_PIN1 11
 #define MOTOR2_PIN2 12
 // sensor de distância
-#define TRIG_PIN 7
-#define ECHO_PIN 8
+#define TRIG_PIN 22
+#define ECHO_PIN 24
 // módulo HC05
 #define RX 19
 #define TX 18
-#define BT_PIN 6  
+#define BT_PIN 5
 // buzzer
 #define BUZZER_PIN 13
 
@@ -26,20 +27,19 @@
 #define TRUE '1'
 
 // Definições de movimento
-#define PAN_LIMIT_1 0
+#define PAN_LIMIT_1 10
 #define PAN_LIMIT_2 180
-#define TILT_LIMIT_1 65
-#define TILT_LIMIT_2 180
-#define RECOIL_REST 180  // Ângulo do servo na posição de descanso
-#define RECOIL_PUSHED 125 // Ângulo do servo necessário para empurrar o dardo
+#define TILT_LIMIT_1 60
+#define TILT_LIMIT_2 150
+#define RECOIL_REST 150 // Ângulo do servo na posição de descanso
+#define RECOIL_PUSHED 80 // Ângulo do servo necessário para empurrar o dardo
 
 // Variáveis e definições associadas aos dados de comunicação serial
 #define buffSize 40
-
-char data_from_app;
-int command_from_app;
-int inputBuffer[buffSize];
-int bytesRecvd = 0;
+#define startMarker 255
+#define endMarker 254
+byte receivedByte;
+byte inputBuffer[buffSize];
 boolean data_received = false;
 
 #define MAX_SIZE 40 // Tamanho máximo do vetor de dados
@@ -110,7 +110,7 @@ void setup() {
   delay(1000);
   servoHorizontal.write(90);
   delay(1000);
-  servoVertical.write(105);
+  servoVertical.write(90);
 
   // Define pino do laser
   pinMode(LASER_PIN, OUTPUT);
@@ -142,6 +142,18 @@ void setup() {
 
 void loop() {
   getData(); // Executa funçao que recebe o buffer de dados
+
+  // if (data_received) {
+  //       // Verificar o comando recebido e realizar ação correspondente
+  //       if (byte_from_app == 1) { // botão do laser ativado
+  //         // Executar ação correspondente ao comando 'laser'
+  //         LASER = ON;       // Liga laser
+  //         ligarLaser();
+  //       } else {
+  //         LASER = OFF;
+  //         desligarLaser();
+  //       }
+  // }
 
   tempoAtual = millis();  // Atualiza o tempo atual a cada iteração do loop
 
@@ -229,7 +241,7 @@ void loop() {
           LASER = OFF;       // Desliga laser
           desligarLaser();
         } 
-        if (inputBuffer[2] == 0) { // botão de propulsão ativado
+        if (inputBuffer[2] == 1) { // botão de propulsão ativado
           // Executar ação correspondente ao comando 'motor_dc'
           PROPULSION = ON;  // Liga propulsores
           ligarPropulsao();
@@ -305,7 +317,7 @@ void loop() {
           LASER = OFF;       // Desliga laser
           desligarLaser();
         } 
-        else if (inputBuffer[2] == 1) { // botão de propulsão desativado
+        else if (inputBuffer[2] == 0) { // botão de propulsão desativado
           // Executar ação correspondente ao comando 'motor_dc'
           PROPULSION = OFF;  // Desliga propulsores
           desligarPropulsao();
@@ -340,59 +352,35 @@ void loop() {
 
 // void getData() {
 //   //expected structure of data [start byte, pan amount, tilt amount, motor on, firing button pressed, laser on, end byte]
-//   //start byte = <
+//   //start byte = 255
 //   //pan amount = byte between 0 and 253
 //   //tilt amount = byte between 0 and 253
 //   //motor on = 0 for off, 1 on
-//   //firing button pressed = 0 for not pressed, 1 for pressed
 //   //laser on = 0 for off, 1 on
-//   //end byte = >
+//   //firing button pressed = 0 for not pressed, 1 for pressed
+//   //end byte = 254
 
-int getData() {
+
+
+void getData() {
   if (Serial1.available()) {
-    beep(); // beep duplo para avisar conexão
-    data_from_app = Serial1.read(); // Lê o caractere disponível    
+    receivedByte = Serial1.read(); // Lê o caractere disponível    
 
-    if (data_from_app == '<') { // Verifica se é o marcador de início
-      started = true; // Marca o início da leitura
+    if (receivedByte == 255) { // Verifica se é o marcador de início
       data_received = false;
       dataIndex = 0; // Reseta o índice de posição no vetor de dados
-    } else if (data_from_app == '>') { // Verifica se é o marcador de fim
-      started = false; // Marca o fim da leitura
+
+    } else if (receivedByte == 254) { // Verifica se é o marcador de fim
       data_received = true;
 
-      // Processa os dados lidos (removendo o marcador de início e fim)
-      // Exemplo: imprime os dados lidos no monitor serial
+    } else { // Se o marcador de início foi encontrado, armazena os dados
+      inputBuffer[dataIndex++] = receivedByte;
 
-      Serial.print("x: ");
-      Serial.println(inputBuffer[0]);
-
-      Serial.print("y: ");
-      Serial.println(inputBuffer[1]);
-
-      Serial.print("motor: ");
-      Serial.println(inputBuffer[2]);
-
-      Serial.print("shoot: ");
-      Serial.println(inputBuffer[3]);
-
-      Serial.print("laser: ");
-      Serial.println(inputBuffer[4]);
-      
-      Serial.println(); // Pula para a próxima linha
-
-    } else if (started && (data_from_app!='\n')) { // Se o marcador de início foi encontrado, armazena os dados
-      command_from_app = (int) data_from_app;
-      inputBuffer[dataIndex] = command_from_app;
-      
-      dataIndex++;
       if (dataIndex >= MAX_SIZE) { // Evita estouro de buffer
         dataIndex = MAX_SIZE - 1;
       }
     }
   }
-
-  return inputBuffer;
 }
 
 // Lógica para verificar se o Bluetooth está conectado
@@ -410,7 +398,7 @@ bool bluetoothConectado() {
 
 // Executa o movimento dos servos
 void move_servo() {
-  byte servoHorizontal_position = map(inputBuffer[0], 0, 253, PAN_LIMIT_2, PAN_LIMIT_1); // converte o valor do inputbuffer na posição do servo
+  byte servoHorizontal_position = map(inputBuffer[0], 0, 253, PAN_LIMIT_1, PAN_LIMIT_2); // converte o valor do inputbuffer na posição do servo
   servoHorizontal.write(servoHorizontal_position); // ajusta a posição do servo horizontal
   byte servoVertical_position = map(inputBuffer[1], 0 , 253, TILT_LIMIT_1, TILT_LIMIT_2); // converte o valor do inputbuffer na posição do servo
   servoVertical.write(servoVertical_position); // ajusta a posição do servo vertical
@@ -448,10 +436,10 @@ void desligarLaser() {
 
 // Liga a propulsão (Ponte H Dupla L298N) - Motores DC em rotação oposta
 void ligarPropulsao() {
-  digitalWrite(MOTOR1_PIN1, HIGH);
-  digitalWrite(MOTOR1_PIN2, LOW);
-  digitalWrite(MOTOR2_PIN1, LOW);  
-  digitalWrite(MOTOR2_PIN2, HIGH);
+  digitalWrite(MOTOR1_PIN1, LOW);
+  digitalWrite(MOTOR1_PIN2, HIGH);
+  digitalWrite(MOTOR2_PIN1, HIGH);  
+  digitalWrite(MOTOR2_PIN2, LOW);
 }
 
 // Desliga a propulsão (Ponte H Dupla L298N)
