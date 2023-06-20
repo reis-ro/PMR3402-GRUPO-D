@@ -1,4 +1,3 @@
-// #include <SoftwareSerial.h>
 #include <Servo.h>
 #include <Ultrasonic.h>
 
@@ -15,8 +14,6 @@
 #define TRIG_PIN 22
 #define ECHO_PIN 24
 // módulo HC05
-#define RX 19
-#define TX 18
 #define BT_PIN 5
 // buzzer
 #define BUZZER_PIN 13
@@ -79,12 +76,6 @@ typedef enum {
 Servo servoHorizontal;
 Servo servoVertical;
 Servo servoEmpurrar;
-
-// Inicializa o objeto Ultrasonic
-Ultrasonic ultrasonic(TRIG_PIN, ECHO_PIN);
-
-// Conecta o pino TX do HC05 ao pino RX 2 do arduino e pino RX do HC05 ao pino TX 3 do arduino por um divisor de tensão
-// SoftwareSerial BTserial(RX, TX);
  
 // Inicializa a variável de verificação da conexão bluetooth
 boolean BTconnected = false;
@@ -111,6 +102,9 @@ void setup() {
   servoHorizontal.write(90);
   delay(1000);
   servoVertical.write(90);
+
+  // Inicializa o objeto Ultrasonic
+  Ultrasonic ultrasonic(TRIG_PIN, ECHO_PIN);
 
   // Define pino do laser
   pinMode(LASER_PIN, OUTPUT);
@@ -143,36 +137,20 @@ void setup() {
 void loop() {
   getData(); // Executa funçao que recebe o buffer de dados
 
-  // if (data_received) {
-  //       // Verificar o comando recebido e realizar ação correspondente
-  //       if (byte_from_app == 1) { // botão do laser ativado
-  //         // Executar ação correspondente ao comando 'laser'
-  //         LASER = ON;       // Liga laser
-  //         ligarLaser();
-  //       } else {
-  //         LASER = OFF;
-  //         desligarLaser();
-  //       }
-  // }
-
   tempoAtual = millis();  // Atualiza o tempo atual a cada iteração do loop
 
-  // faz a leitura do sensor de distância para exibir na interface
-  // if (tempoAtual - ultimaLeitura >= intervaloLeitura) {
-  //   // Realiza a leitura do sensor de distância
-  //   float distancia_cm = ultrasonic.read();
+  // Faz a leitura do sensor de distância para exibir na interface
+  if (tempoAtual - ultimaLeitura >= intervaloLeitura) {
+    // Realiza a leitura do sensor de distância
+    float distancia_cm = ultrasonic.read();
 
-  //   // Envia a distância no monitor serial bluetooth
-  //   Serial.print("Distancia: ");
-  //   Serial.print(distancia_cm);
-  //   Serial.println(" cm");
+    // Envia a distância no monitor serial
+    Serial.print("D:");
+    Serial.print(distancia_cm);
+    Serial.println(" cm");
 
-  //   Serial1.print("Distancia: ");
-  //   Serial1.print(distancia_cm);
-  //   Serial1.println(" cm");
-
-  //   ultimaLeitura = tempoAtual; // Atualiza o tempo da última leitura
-  // }
+    ultimaLeitura = tempoAtual; // Atualiza o tempo da última leitura
+  }
   
   // Máquina de estados
   switch (currentState) {
@@ -201,7 +179,6 @@ void loop() {
       move_servo(); // Ajusta posição do servoHorizontal e servoVertical
 
       if (data_received) {
-          // Serial.println(sizeof(inputBuffer[4]));
         // Verificar o comando recebido e realizar ação correspondente
         if (inputBuffer[4] == 1) { // botão do laser ativado
           // Executar ação correspondente ao comando 'laser'
