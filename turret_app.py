@@ -51,10 +51,9 @@ class NerfApp(QWidget):
         self.laser_on_button = self.ui.laser_on_button
 
         self.communication = ArduinoCommunication(self)
-        #self.dist = 0
 
         self.bluetooth_button.clicked.connect(self.connectPopUp)
-        self.motor_on_button.clicked.connect(self.motorOnOff)
+        self.motor_on_button.clicked.connect(self.motorOnOff)   
         self.laser_on_button.clicked.connect(self.laserOnOff)
 
     def connectPopUp(self):
@@ -93,10 +92,6 @@ class NerfApp(QWidget):
             #message = bytes([255, 0, 0, 0, 0, self.laser_on, 254])
 
             self.communication.send_message(message)
-            
-            # for i in message:
-            #     self.communication.send_message(str(i).encode())
-            #     time.sleep(1)
 
     def remap(self, value, new_range_min, new_range_max, old_range_min, old_range_max): # remapeia valores de 70 a 550 para 0 a 253 
 
@@ -109,13 +104,8 @@ class NerfApp(QWidget):
             remapped_val = new_range_min
 
         return remapped_val
-    
-    # def sensor_read(self):
-    #     if self.connected:
-    #         self.dist = self.communication.read_ultrasonic_sensor() 
 
     def mouseMoveEvent(self, event):
-        #self.sensor_read()
         if (69 < event.x() < 551 and 69 < event.y() < 551):   # se o mouse estiver dentro do frame
             self.x = int(self.remap(event.x(), 0, 253, 70, 550))
             self.y = int(self.remap(event.y(), 0, 253, 70, 550))
